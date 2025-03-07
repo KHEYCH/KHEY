@@ -1,0 +1,447 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>プレミアムオセロ</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+            -webkit-text-size-adjust: 100%;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        h1 {
+            font-size: 24px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        h2 {
+            font-size: 18px;
+            margin: 15px 0;
+            text-align: center;
+        }
+        
+        .game-container {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        
+        .board {
+            width: 100%;
+            background-color: #1a8b1a;
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            grid-gap: 2px;
+            border: 2px solid #000;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            aspect-ratio: 1 / 1;
+        }
+        
+        .cell {
+            background-color: #1a8b1a;
+            border: 1px solid #000;
+            position: relative;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .cell::before {
+            content: "";
+            display: block;
+            padding-bottom: 100%;
+        }
+        
+        .disc {
+            position: absolute;
+            width: 80%;
+            height: 80%;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+        
+        .black {
+            background-color: #000;
+        }
+        
+        .white {
+            background-color: #fff;
+        }
+        
+        .valid-move {
+            background-color: rgba(0, 255, 0, 0.3);
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-box {
+            background-color: #fff;
+            border-radius: 8px;
+            padding: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        
+        .game-status {
+            background-color: #fff;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 10px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+            width: 100%;
+        }
+        
+        .history {
+            background-color: #fff;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            max-height: 200px;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        .history-item {
+            padding: 5px 0;
+            border-bottom: 1px solid #eee;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>プレミアムオセロ</h1>
+        
+        <div class="game-status" id="gameStatus">
+            <h2 id="turnStatus">黒の番です</h2>
+            <p id="thinkingStatus">考え中...</p>
+        </div>
+        
+        <div class="board" id="board">
+            <!-- ボードはJavaScriptで生成されます -->
+        </div>
+        
+        <div class="stats">
+            <div class="stat-box">
+                <h3>残りマス</h3>
+                <p id="remainingCells">60</p>
+            </div>
+            <div class="stat-box">
+                <h3>ターン数</h3>
+                <p id="turnCount">4</p>
+            </div>
+            <div class="stat-box">
+                <h3>黒の割合</h3>
+                <p id="blackPercentage">50%</p>
+            </div>
+            <div class="stat-box">
+                <h3>白の割合</h3>
+                <p id="whitePercentage">50%</p>
+            </div>
+        </div>
+        
+        <button class="button" id="newGameBtn">新しいゲーム</button>
+        
+        <div class="history">
+            <h3>対局履歴</h3>
+            <div id="gameHistory">
+                <!-- 履歴はJavaScriptで更新されます -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const board = document.getElementById('board');
+            const turnStatus = document.getElementById('turnStatus');
+            const thinkingStatus = document.getElementById('thinkingStatus');
+            const remainingCells = document.getElementById('remainingCells');
+            const turnCount = document.getElementById('turnCount');
+            const blackPercentage = document.getElementById('blackPercentage');
+            const whitePercentage = document.getElementById('whitePercentage');
+            const newGameBtn = document.getElementById('newGameBtn');
+            const gameHistory = document.getElementById('gameHistory');
+            
+            // ゲーム状態
+            let gameState = {
+                board: Array(8).fill().map(() => Array(8).fill(0)),
+                currentPlayer: 1, // 1: 黒, 2: 白
+                moves: [],
+                gameOver: false
+            };
+            
+            // ボードの初期化
+            function initializeBoard() {
+                // ボードをクリア
+                board.innerHTML = '';
+                
+                // 8x8のセルを作成
+                for (let i = 0; i < 8; i++) {
+                    for (let j = 0; j < 8; j++) {
+                        const cell = document.createElement('div');
+                        cell.className = 'cell';
+                        cell.dataset.row = i;
+                        cell.dataset.col = j;
+                        
+                        // タッチとクリックのイベントリスナー
+                        cell.addEventListener('click', function() {
+                            handleCellClick(i, j);
+                        });
+                        
+                        board.appendChild(cell);
+                    }
+                }
+                
+                // 初期配置
+                gameState.board = Array(8).fill().map(() => Array(8).fill(0));
+                gameState.board[3][3] = 2; // 白
+                gameState.board[3][4] = 1; // 黒
+                gameState.board[4][3] = 1; // 黒
+                gameState.board[4][4] = 2; // 白
+                
+                gameState.currentPlayer = 1; // 黒からスタート
+                gameState.moves = [];
+                gameState.gameOver = false;
+                
+                updateBoardView();
+                updateStats();
+                showValidMoves();
+                
+                turnStatus.textContent = '黒の番です';
+                thinkingStatus.style.display = 'none';
+            }
+            
+            // ボードの表示を更新
+            function updateBoardView() {
+                for (let i = 0; i < 8; i++) {
+                    for (let j = 0; j < 8; j++) {
+                        const cellValue = gameState.board[i][j];
+                        const cellElement = document.querySelector(`.cell[data-row="${i}"][data-col="${j}"]`);
+                        
+                        // 既存のディスクを削除
+                        const existingDisc = cellElement.querySelector('.disc');
+                        if (existingDisc) {
+                            cellElement.removeChild(existingDisc);
+                        }
+                        
+                        // 有効な手のハイライトを削除
+                        cellElement.classList.remove('valid-move');
+                        
+                        // 新しいディスクを追加（もしあれば）
+                        if (cellValue > 0) {
+                            const disc = document.createElement('div');
+                            disc.className = `disc ${cellValue === 1 ? 'black' : 'white'}`;
+                            cellElement.appendChild(disc);
+                        }
+                    }
+                }
+            }
+            
+            // 統計情報の更新
+            function updateStats() {
+                let blackCount = 0;
+                let whiteCount = 0;
+                
+                for (let i = 0; i < 8; i++) {
+                    for (let j = 0; j < 8; j++) {
+                        if (gameState.board[i][j] === 1) blackCount++;
+                        else if (gameState.board[i][j] === 2) whiteCount++;
+                    }
+                }
+                
+                const total = blackCount + whiteCount;
+                const remaining = 64 - total;
+                
+                remainingCells.textContent = remaining;
+                turnCount.textContent = gameState.moves.length + 4; // 初期の4つのディスクを含む
+                
+                const blackPerc = Math.round((blackCount / total) * 100);
+                const whitePerc = Math.round((whiteCount / total) * 100);
+                
+                blackPercentage.textContent = `${blackPerc}%`;
+                whitePercentage.textContent = `${whitePerc}%`;
+                
+                // ゲーム終了チェック
+                if (remaining === 0 || (!hasValidMoves(1) && !hasValidMoves(2))) {
+                    gameState.gameOver = true;
+                    const winner = blackCount > whiteCount ? '黒' : (whiteCount > blackCount ? '白' : '引き分け');
+                    turnStatus.textContent = 'ゲーム終了';
+                    thinkingStatus.textContent = winner === '引き分け' ? '引き分けです' : `勝者: ${winner}`;
+                    thinkingStatus.style.display = 'block';
+                    
+                    // 履歴に追加
+                    const historyItem = document.createElement('div');
+                    historyItem.className = 'history-item';
+                    historyItem.textContent = `ゲーム終了: ${winner === '引き分け' ? '引き分け' : `${winner}の勝ち`} (黒${blackCount}-白${whiteCount})`;
+                    gameHistory.prepend(historyItem);
+                }
+            }
+            
+            // 有効な手の表示
+            function showValidMoves() {
+                if (gameState.gameOver) return;
+                
+                const validMoves = getValidMoves(gameState.currentPlayer);
+                
+                if (validMoves.length === 0) {
+                    // パスの処理
+                    gameState.currentPlayer = gameState.currentPlayer === 1 ? 2 : 1;
+                    turnStatus.textContent = `${gameState.currentPlayer === 1 ? '黒' : '白'}の番です`;
+                    thinkingStatus.textContent = '有効な手がないためパスします';
+                    thinkingStatus.style.display = 'block';
+                    
+                    // 次のプレイヤーも打てるかチェック
+                    if (!hasValidMoves(gameState.currentPlayer)) {
+                        updateStats(); // これによりゲーム終了処理が行われる
+                    } else {
+                        showValidMoves();
+                    }
+                    return;
+                }
+                
+                // 有効な手をハイライト
+                validMoves.forEach(move => {
+                    const cellElement = document.querySelector(`.cell[data-row="${move.row}"][data-col="${move.col}"]`);
+                    cellElement.classList.add('valid-move');
+                });
+            }
+            
+            // セルクリック処理
+            function handleCellClick(row, col) {
+                if (gameState.gameOver) return;
+                
+                const validMoves = getValidMoves(gameState.currentPlayer);
+                const isValidMove = validMoves.some(move => move.row === row && move.col === col);
+                
+                if (!isValidMove) return;
+                
+                // 石を置く
+                gameState.board[row][col] = gameState.currentPlayer;
+                
+                // 石をひっくり返す
+                const flippedDiscs = getFlippedDiscs(row, col, gameState.currentPlayer);
+                flippedDiscs.forEach(disc => {
+                    gameState.board[disc.row][disc.col] = gameState.currentPlayer;
+                });
+                
+                // 手を記録
+                gameState.moves.push({row, col, player: gameState.currentPlayer});
+                
+                // ボード表示更新
+                updateBoardView();
+                
+                // プレイヤー交代
+                gameState.currentPlayer = gameState.currentPlayer === 1 ? 2 : 1;
+                
+                // 統計更新
+                updateStats();
+                
+                if (!gameState.gameOver) {
+                    turnStatus.textContent = `${gameState.currentPlayer === 1 ? '黒' : '白'}の番です`;
+                    thinkingStatus.style.display = 'none';
+                    
+                    // 有効な手を表示
+                    showValidMoves();
+                }
+            }
+            
+            // 有効な手の取得
+            function getValidMoves(player) {
+                const validMoves = [];
+                
+                for (let i = 0; i < 8; i++) {
+                    for (let j = 0; j < 8; j++) {
+                        if (gameState.board[i][j] === 0) {
+                            const flippedDiscs = getFlippedDiscs(i, j, player);
+                            if (flippedDiscs.length > 0) {
+                                validMoves.push({row: i, col: j});
+                            }
+                        }
+                    }
+                }
+                
+                return validMoves;
+            }
+            
+            // 有効な手があるかチェック
+            function hasValidMoves(player) {
+                return getValidMoves(player).length > 0;
+            }
+            
+            // ひっくり返せる石の取得
+            function getFlippedDiscs(row, col, player) {
+                if (gameState.board[row][col] !== 0) return [];
+                
+                const opponent = player === 1 ? 2 : 1;
+                const directions = [
+                    {dr: -1, dc: 0},  // 上
+                    {dr: -1, dc: 1},  // 右上
+                    {dr: 0, dc: 1},   // 右
+                    {dr: 1, dc: 1},   // 右下
+                    {dr: 1, dc: 0},   // 下
+                    {dr: 1, dc: -1},  // 左下
+                    {dr: 0, dc: -1},  // 左
+                    {dr: -1, dc: -1}  // 左上
+                ];
+                
+                const flippedDiscs = [];
+                
+                directions.forEach(dir => {
+                    let r = row + dir.dr;
+                    let c = col + dir.dc;
+                    const tempFlipped = [];
+                    
+                    while (r >= 0 && r < 8 && c >= 0 && c < 8 && gameState.board[r][c] === opponent) {
+                        tempFlipped.push({row: r, col: c});
+                        r += dir.dr;
+                        c += dir.dc;
+                    }
+                    
+                    if (r >= 0 && r < 8 && c >= 0 && c < 8 && gameState.board[r][c] === player && tempFlipped.length > 0) {
+                        flippedDiscs.push(...tempFlipped);
+                    }
+                });
+                
+                return flippedDiscs;
+            }
+            
+            // 新しいゲームボタン
+            newGameBtn.addEventListener('click', function() {
+                initializeBoard();
+            });
+            
+            // ゲーム初期化
+            initializeBoard();
+        });
+    </script>
+</body>
+</html>
